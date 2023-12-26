@@ -1,0 +1,45 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/utils/math/SafeMath.sol";
+
+contract NFTMarketplace is ERC721, Ownable {
+    using SafeMath for uint256;
+
+    mapping(uint256 => uint256) public tokenPrices;
+
+    constructor() ERC721("NFTMarketplace", "NFTM") {}
+
+    function mint(address to, uint256 tokenId, uint256 price) external onlyOwner {
+        _safeMint(to, tokenId);
+        setTokenPrice(tokenId, price);
+    }
+
+    function setTokenPrice(uint256 tokenId, uint256 price) public onlyOwner {
+        require(_exists(tokenId), "Token does not exist");
+        tokenPrices[tokenId] = price;
+    }
+
+    function buyToken(uint256 tokenId) external payable {
+        require(_exists(tokenId), "Token does not exist");
+        require(tokenPrices[tokenId] > 0, "Token not for sale");
+        require(msg.value >= tokenPrices[tokenId], "Insufficient funds");
+
+        address tokenOwner = ownerOf(tokenId);
+        _transfer(tokenOwner, msg.sender, tokenId);
+
+        uint256 price = tokenPrices[tokenId];
+        tokenPrices[tokenId] = 0; // Remove the sale listing
+
+        (bool success, ) = payable(tokenOwner).call{value: price}("");
+        require(success, "Transfer failed");
+    }
+
+    function withdrawBalance() external onlyOwner {
+        uint256 balance = address(this).balance;
+        (bool success, ) = payable(owner()).call{value: balance}("");
+        require(success, "Withdrawal failed");
+    }
+}
